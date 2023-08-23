@@ -1,3 +1,6 @@
+# What is this?
+This is a submission to the Chess Coding Challenge by Sebastian Lague. One is provided a framework for a chessbot and the goal is to create a bot within certain limitations that will eventually play against other bots.
+
 # Chess Coding Challenge (C#)
 Welcome to the [chess coding challenge](https://youtu.be/iScy18pVR58)! This is a friendly competition in which your goal is to create a small chess bot (in C#) using the framework provided in this repository.
 Once submissions close, these bots will battle it out to discover which bot is best!
