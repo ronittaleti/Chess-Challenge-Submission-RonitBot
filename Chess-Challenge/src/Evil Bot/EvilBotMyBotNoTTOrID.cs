@@ -2,8 +2,9 @@
 using System.Collections.Generic;
 using System.Linq;
 using ChessChallenge.API;
+using Raylib_cs;
 
-public class MyBot : IChessBot
+public class EvilBotMyBotNoTTOrID : IChessBot
 {
     int[] pieceValues = { 0, 100, 300, 300, 500, 900, 10000 };
 
@@ -16,7 +17,29 @@ public class MyBot : IChessBot
     static private int MAX_PLY = 5;
     Move[,] killerMoves = new Move[MAX_PLY, 2]; // Max depth for killer move storage
 
-    (ulong, Move, int, int, int)[] TTtable = new (ulong, Move, int, int, int)[1048576];
+    private const sbyte EXACT = 0, LOWERBOUND = -1, UPPERBOUND = 1, INVALID = -2;
+
+    //14 bytes per entry, likely will align to 16 bytes due to padding (if it aligns to 32, recalculate max TP table size)
+    public struct Transposition
+    {
+        public Transposition(ulong zHash, int eval, sbyte d)
+        {
+            zobristHash = zHash;
+            evaluation = eval;
+            depth = d;
+            flag = INVALID;
+        }
+
+        public ulong zobristHash = 0;
+        public int evaluation = 0;
+        public sbyte depth = 0;
+        public sbyte flag = INVALID;
+    };
+
+
+    static private ulong k_TpMask = 0x7FFFFF; //4.7 million entries, likely consuming about 151 MB
+
+    private Transposition[] m_TPTable = new Transposition[k_TpMask + 1];
 
     // Big table packed with data from premade piece square tables
     // Unpack using PackedEvaluationTables[set, rank] = file
@@ -56,25 +79,58 @@ public class MyBot : IChessBot
             killerMoves[ply, 0] = Move.NullMove;
             killerMoves[ply, 1] = Move.NullMove;
         }
-        for (int depth = 1; depth <= 50; depth++)
-        {
-            Search(board, timer, depth, -10000000, 10000000, 0);
+        //for (int depth = 1; depth <= 50; depth++)
+        //{
+        //    Search(board, timer, depth, -10000000, 10000000, 0);
 
-            if (timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30) break;
-        }
+        //    if (timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30) break;
+        //}
+        Search(board, timer, 6, -10000000, 10000000, 0);
         return bestMove.IsNull ? board.GetLegalMoves()[0] : bestMove;
     }
 
+    //public Move[] OrderMoves(Move[] legalMoves, Move[] legalCaptureMoves, int ply)
+    //{
+    //    List<Move> orderedMoves = new List<Move>();
+
+
+    //    legalCaptureMoves.OrderByDescending(move =>
+    //    {
+    //        return pieceValues[(int)move.CapturePieceType] - pieceValues[(int)move.MovePieceType];
+    //    });
+
+    //    // Add killer moves first
+    //    if (!killerMoves[ply, 0].IsNull)
+    //    {
+    //        orderedMoves.Add(killerMoves[ply, 0]);
+    //    }
+    //    if (!killerMoves[ply, 1].IsNull)
+    //    {
+    //        orderedMoves.Add(killerMoves[ply, 1]);
+    //    }
+
+    //    orderedMoves.AddRange(legalCaptureMoves);
+
+    //    // Add quiet moves last
+    //    foreach (Move move in legalMoves)
+    //    {
+    //        if (!move.IsCapture)
+    //        {
+    //            orderedMoves.Add(move);
+    //        }
+    //    }
+
+    //    return orderedMoves.ToArray();
+    //}
+
     public int Search(Board board, Timer timer, int depth, int alpha, int beta, int ply)
     {
-        int oldAlpha = alpha;
-
         if (ply > 0 && board.IsRepeatedPosition())
         {
             return 0;
         }
 
-        var (ttKey, ttMove, ttDepth, ttScore, ttBound) = TTtable[board.ZobristKey % 1048576];
+        //ref Transposition transposition = ref m_TPTable[board.ZobristKey & 0x7FFFFF];
 
         bool qsearch = depth <= 0;
 
@@ -87,21 +143,20 @@ public class MyBot : IChessBot
             alpha = Math.Max(alpha, maxScore);
         }
 
-        if (ttKey == board.ZobristKey && ttDepth >= depth && ply > 0)
-        {
-            //If we have an "exact" score (a <    score < beta) just use that
-            if (ttBound == 1) return ttScore;
-            //If we have a lower bound better than beta, use that
-            if (ttBound == 2 && ttScore >= beta) return ttScore;
-            //If we have an upper bound worse than alpha, use that
-            if (ttBound == 3 && ttScore <= alpha) return ttScore;
-        }
+        //if (transposition.zobristHash == board.ZobristKey && transposition.depth >= depth)
+        //{
+        //    //If we have an "exact" score (a < score < beta) just use that
+        //    if (transposition.flag == 1) return transposition.evaluation;
+        //    //If we have a lower bound better than beta, use that
+        //    if (transposition.flag == 2 && transposition.evaluation >= beta) return transposition.evaluation;
+        //    //If we have an upper bound worse than alpha, use that
+        //    if (transposition.flag == 3 && transposition.evaluation <= alpha) return transposition.evaluation;
+        //}
 
         Move[] legalMoves = board.GetLegalMoves(qsearch).OrderByDescending(move =>
-            ttMove == move ? 500000 :
-            move.IsCapture ? 10 * (int)move.CapturePieceType - (int)move.MovePieceType :
-            move.IsPromotion ? 10 :
-            killerMoves[Math.Min(ply, MAX_PLY - 1), 0] == move || killerMoves[Math.Min(ply, MAX_PLY - 1), 1] == move ? 9 :
+            move.IsCapture ? 1000000 * pieceValues[(int)move.CapturePieceType] - pieceValues[(int)move.MovePieceType] :
+            move.IsPromotion ? 1000000 :
+            killerMoves[Math.Min(ply, MAX_PLY - 1), 0] == move || killerMoves[Math.Min(ply, MAX_PLY - 1), 1] == move ? 900000 :
             0
         ).ToArray();
 
@@ -116,7 +171,7 @@ public class MyBot : IChessBot
             int score = -Search(board, timer, depth - 1, -beta, -alpha, ply + 1);
             board.UndoMove(move);
 
-            if (timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30) return 10000000;
+            //if (timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30) return 10000000;
 
             if (score > maxScore)
             {
@@ -125,20 +180,26 @@ public class MyBot : IChessBot
                 {
                     bestMove = move;
                 }
+                if (ply < MAX_PLY)
+                {
+                    if (!move.IsCapture && !move.IsPromotion)
+                    {
+                        board.MakeMove(move);
+                        if (!board.IsInCheck())
+                        {
+                            killerMoves[ply, 1] = killerMoves[ply, 0];
+                            killerMoves[ply, 0] = move;
+                        }
+                        board.UndoMove(move);
+                    }
+                }
             }
             alpha = Math.Max(alpha, maxScore);
             if (alpha >= beta)
             {
-                if (!move.IsCapture && !move.IsPromotion && ply < MAX_PLY && move != killerMoves[ply, 0])
-                {
-                    killerMoves[ply, 1] = killerMoves[ply, 0];
-                    killerMoves[ply, 0] = move;
-                }
                 break;
             }
         }
-
-        TTtable[board.ZobristKey % 1048576] = (board.ZobristKey, bestMove, depth, maxScore, oldAlpha <= alpha ? 3 : maxScore >= beta ? 2 : 1);
 
         return maxScore;
     }

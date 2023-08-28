@@ -3,7 +3,7 @@ using ChessChallenge.API;
 using System;
 using System.Linq;
 
-public class EvilBot : IChessBot
+public class EvilBotT1 : IChessBot
 {
     //                     .  P    K    B    R    Q    K
     int[] kPieceValues = { 0, 100, 300, 310, 500, 900, 10000 };

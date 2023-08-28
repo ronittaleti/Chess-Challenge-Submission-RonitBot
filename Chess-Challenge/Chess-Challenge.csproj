@@ -29,11 +29,17 @@
     <Compile Update="src\Framework\Application\UI\BotBrainCapacityUI.cs">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </Compile>
-    <Compile Update="src\Evil Bot\EvilBot.cs">
+    <Compile Condition=" '$(EnableDefaultCompileItems)' == 'true' " Update="src\Evil Bot\EvilBotV1 %28copy%29.cs">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Compile>
+    <Compile Condition=" '$(EnableDefaultCompileItems)' == 'true' " Update="src\Evil Bot\EvilBotV2 %28copy%29.cs">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Compile>
   </ItemGroup>
 
+  <ItemGroup>
+    <None Remove="src\Framework\UCI\" />
+  </ItemGroup>
   <ItemGroup>
     <None Update="resources\Fens.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -51,6 +57,7 @@
 
   <ItemGroup>
     <Folder Include="src\Framework\Chess\" />
+    <Folder Include="src\Framework\UCI\" />
   </ItemGroup>
 
   <ItemGroup>

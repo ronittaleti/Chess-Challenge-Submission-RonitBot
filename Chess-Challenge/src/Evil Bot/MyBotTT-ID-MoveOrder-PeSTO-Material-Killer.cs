@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using ChessChallenge.API;
 
-public class MyBot : IChessBot
+public class EvilBot : IChessBot
 {
     int[] pieceValues = { 0, 100, 300, 300, 500, 900, 10000 };
 
@@ -65,6 +65,40 @@ public class MyBot : IChessBot
         return bestMove.IsNull ? board.GetLegalMoves()[0] : bestMove;
     }
 
+    //public Move[] OrderMoves(Move[] legalMoves, Move[] legalCaptureMoves, int ply)
+    //{
+    //    List<Move> orderedMoves = new List<Move>();
+
+
+    //    legalCaptureMoves.OrderByDescending(move =>
+    //    {
+    //        return pieceValues[(int)move.CapturePieceType] - pieceValues[(int)move.MovePieceType];
+    //    });
+
+    //    // Add killer moves first
+    //    if (!killerMoves[ply, 0].IsNull)
+    //    {
+    //        orderedMoves.Add(killerMoves[ply, 0]);
+    //    }
+    //    if (!killerMoves[ply, 1].IsNull)
+    //    {
+    //        orderedMoves.Add(killerMoves[ply, 1]);
+    //    }
+
+    //    orderedMoves.AddRange(legalCaptureMoves);
+
+    //    // Add quiet moves last
+    //    foreach (Move move in legalMoves)
+    //    {
+    //        if (!move.IsCapture)
+    //        {
+    //            orderedMoves.Add(move);
+    //        }
+    //    }
+
+    //    return orderedMoves.ToArray();
+    //}
+
     public int Search(Board board, Timer timer, int depth, int alpha, int beta, int ply)
     {
         int oldAlpha = alpha;
@@ -98,10 +132,10 @@ public class MyBot : IChessBot
         }
 
         Move[] legalMoves = board.GetLegalMoves(qsearch).OrderByDescending(move =>
-            ttMove == move ? 500000 :
-            move.IsCapture ? 10 * (int)move.CapturePieceType - (int)move.MovePieceType :
-            move.IsPromotion ? 10 :
-            killerMoves[Math.Min(ply, MAX_PLY - 1), 0] == move || killerMoves[Math.Min(ply, MAX_PLY - 1), 1] == move ? 9 :
+            ttMove == move ? 500000000 :
+            move.IsCapture ? 1000000 * (int)move.CapturePieceType - (int)move.MovePieceType :
+            move.IsPromotion ? 1000000 :
+            killerMoves[Math.Min(ply, MAX_PLY - 1), 0] == move || killerMoves[Math.Min(ply, MAX_PLY - 1), 1] == move ? 900000 :
             0
         ).ToArray();
 
@@ -125,15 +159,23 @@ public class MyBot : IChessBot
                 {
                     bestMove = move;
                 }
+                if (ply < MAX_PLY)
+                {
+                    if (!move.IsCapture && !move.IsPromotion)
+                    {
+                        //board.MakeMove(move);
+                        //if (!board.IsInCheck())
+                        //{
+                        killerMoves[ply, 1] = killerMoves[ply, 0];
+                        killerMoves[ply, 0] = move;
+                        //}
+                        //board.UndoMove(move);
+                    }
+                }
             }
             alpha = Math.Max(alpha, maxScore);
             if (alpha >= beta)
             {
-                if (!move.IsCapture && !move.IsPromotion && ply < MAX_PLY && move != killerMoves[ply, 0])
-                {
-                    killerMoves[ply, 1] = killerMoves[ply, 0];
-                    killerMoves[ply, 0] = move;
-                }
                 break;
             }
         }
