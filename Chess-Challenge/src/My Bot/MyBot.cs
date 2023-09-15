@@ -17,7 +17,7 @@ public class MyBot : IChessBot
 
     (ulong, Move, int, int, int)[] TTtable = new (ulong, Move, int, int, int)[1048576];
 
-    int[,,] history;
+    int[,,] history = new int[2, 7, 64];
 
     // Pawn, Knight, Bishop, Rook, Queen, King 
     private readonly short[] _pieceValues =
@@ -69,11 +69,8 @@ public class MyBot : IChessBot
     public Move Think(Board board, Timer timer)
     {
         bestMove = Move.NullMove;
-        history = new int[2, 7, 64];
-        for (int ply = 0; ++ply < 51;)
-        {
-            killerMoves[ply] = Move.NullMove;
-        }
+        Array.Clear(history);
+        Array.Clear(killerMoves);
         for (int depth = 1; ++depth <= 50;)
         {
             Search(board, timer, depth, -10000000, 10000000, 0);
@@ -86,7 +83,7 @@ public class MyBot : IChessBot
     public int Search(Board board, Timer timer, int depth, int alpha, int beta, int ply)
     {
         bool inCheck = board.IsInCheck();
-        int maxScore = int.MinValue, oldAlpha = alpha;
+        int maxScore = int.MinValue;
         bool qsearch = depth <= 0;
 
         if (!qsearch && board.GetLegalMoves().Length == 0)
@@ -126,14 +123,18 @@ public class MyBot : IChessBot
 
         int numMoves = 0;
 
+        int oldAlpha = alpha;
+
+        Move localBestMove = Move.NullMove;
+
         foreach (Move move in legalMoves)
         {
             board.MakeMove(move);
             bool firstNode = numMoves == 0;
-            int doLmr = depth >= 3 && !(move.IsCapture || board.IsInCheck() || !firstNode) ? 1 : 0;
+            bool doLmr = depth >= 3 && !(move.IsCapture || board.IsInCheck() || !firstNode);
 
-            int score = -Search(board, timer, depth - 1 - doLmr, firstNode ? -beta : -alpha - 1, -alpha, ply + 1);
-            score = alpha < score && (score < beta || doLmr == 1) && !firstNode ? -Search(board, timer, depth - 1, -beta, -alpha, ply + 1) : score;
+            int score = -Search(board, timer, depth - 1 - (doLmr ? 1 : 0), firstNode ? -beta : -alpha - 1, -alpha, ply + 1);
+            score = alpha < score && (score < beta || doLmr) && !firstNode ? -Search(board, timer, depth - 1, -beta, -alpha, ply + 1) : score;
             board.UndoMove(move);
 
             if (timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30)
@@ -142,6 +143,7 @@ public class MyBot : IChessBot
             if (score > maxScore)
             {
                 maxScore = score;
+                localBestMove = move;
                 if (ply == 0)
                     bestMove = move;
                 alpha = Math.Max(alpha, maxScore);
@@ -162,7 +164,7 @@ public class MyBot : IChessBot
             numMoves++;
         }
 
-        TTtable[board.ZobristKey % 1048576] = (board.ZobristKey, bestMove, depth, maxScore, maxScore < oldAlpha ? 3 : maxScore >= beta ? 2 : 1);
+        TTtable[board.ZobristKey % 1048576] = (board.ZobristKey, localBestMove, depth, maxScore, maxScore < oldAlpha ? 3 : maxScore >= beta ? 2 : 1);
 
         return maxScore;
     }
@@ -170,9 +172,6 @@ public class MyBot : IChessBot
     private int Evaluate(Board board, ulong ttKey, int ttScore)
     {
         if (ttKey == board.ZobristKey) return ttScore;
-        int sum = 0;
-        for (int i = 0; ++i < 7;)
-            sum += (board.GetPieceList((PieceType)i, true).Count - board.GetPieceList((PieceType)i, false).Count) * pieceValues[i];
 
         int middlegame = 0, endgame = 0, gamephase = 0, sideToMove = 2, piece, square;
         for (; --sideToMove >= 0; middlegame = -middlegame, endgame = -endgame)
@@ -188,8 +187,6 @@ public class MyBot : IChessBot
                     endgame += _pst[square][piece + 6];
                 }
 
-        sum += (middlegame * gamephase + endgame * (24 - gamephase)) / 24;
-
-        return sum * (board.IsWhiteToMove ? 1 : -1);
+        return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (board.IsWhiteToMove ? 1 : -1);
     }
 }
