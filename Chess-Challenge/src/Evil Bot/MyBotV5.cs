@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using ChessChallenge.API;
 
-public class MyBotTTIDMoveOrderPeSTOMaterialKiller : IChessBot
+public class MyBotV5 : IChessBot
 {
     int[] pieceValues = { 0, 100, 300, 300, 500, 900, 10000 };
 
@@ -13,10 +13,11 @@ public class MyBotTTIDMoveOrderPeSTOMaterialKiller : IChessBot
 
     private readonly int[] GamePhaseIncrement = { 0, 1, 1, 2, 4, 0 };
 
-    static private int MAX_PLY = 5;
-    Move[,] killerMoves = new Move[MAX_PLY, 2]; // Max depth for killer move storage
+    Move[,] killerMoves = new Move[51, 2]; // Max depth for killer move storage
 
     (ulong, Move, int, int, int)[] TTtable = new (ulong, Move, int, int, int)[1048576];
+
+    int[,,] history;
 
     // Big table packed with data from premade piece square tables
     // Unpack using PackedEvaluationTables[set, rank] = file
@@ -51,12 +52,13 @@ public class MyBotTTIDMoveOrderPeSTOMaterialKiller : IChessBot
     public Move Think(Board board, Timer timer)
     {
         bestMove = Move.NullMove;
-        for (int ply = 0; ply < MAX_PLY; ply++)
+        history = new int[2, 7, 64];
+        for (int ply = 0; ++ply < 51;)
         {
             killerMoves[ply, 0] = Move.NullMove;
             killerMoves[ply, 1] = Move.NullMove;
         }
-        for (int depth = 1; depth <= 50; depth++)
+        for (int depth = 1; ++depth <= 50;)
         {
             Search(board, timer, depth, -10000000, 10000000, 0);
 
@@ -65,54 +67,17 @@ public class MyBotTTIDMoveOrderPeSTOMaterialKiller : IChessBot
         return bestMove.IsNull ? board.GetLegalMoves()[0] : bestMove;
     }
 
-    //public Move[] OrderMoves(Move[] legalMoves, Move[] legalCaptureMoves, int ply)
-    //{
-    //    List<Move> orderedMoves = new List<Move>();
-
-
-    //    legalCaptureMoves.OrderByDescending(move =>
-    //    {
-    //        return pieceValues[(int)move.CapturePieceType] - pieceValues[(int)move.MovePieceType];
-    //    });
-
-    //    // Add killer moves first
-    //    if (!killerMoves[ply, 0].IsNull)
-    //    {
-    //        orderedMoves.Add(killerMoves[ply, 0]);
-    //    }
-    //    if (!killerMoves[ply, 1].IsNull)
-    //    {
-    //        orderedMoves.Add(killerMoves[ply, 1]);
-    //    }
-
-    //    orderedMoves.AddRange(legalCaptureMoves);
-
-    //    // Add quiet moves last
-    //    foreach (Move move in legalMoves)
-    //    {
-    //        if (!move.IsCapture)
-    //        {
-    //            orderedMoves.Add(move);
-    //        }
-    //    }
-
-    //    return orderedMoves.ToArray();
-    //}
-
     public int Search(Board board, Timer timer, int depth, int alpha, int beta, int ply)
     {
-        int oldAlpha = alpha;
+        if (board.GetLegalMoves().Length == 0) return board.IsInCheck() ? ply - 10000000 : 0;
 
-        if (ply > 0 && board.IsRepeatedPosition())
-        {
-            return 0;
-        }
-
-        var (ttKey, ttMove, ttDepth, ttScore, ttBound) = TTtable[board.ZobristKey % 1048576];
-
-        bool qsearch = depth <= 0;
+        if (ply > 0 && board.IsRepeatedPosition()) return 0;
 
         int maxScore = int.MinValue;
+        int oldAlpha = alpha;
+        bool qsearch = depth <= 0;
+
+        var (ttKey, ttMove, ttDepth, ttScore, ttBound) = TTtable[board.ZobristKey % 1048576];
 
         if (qsearch)
         {
@@ -121,33 +86,22 @@ public class MyBotTTIDMoveOrderPeSTOMaterialKiller : IChessBot
             alpha = Math.Max(alpha, maxScore);
         }
 
-        if (ttKey == board.ZobristKey && ttDepth >= depth && ply > 0)
-        {
-            //If we have an "exact" score (a <    score < beta) just use that
-            if (ttBound == 1) return ttScore;
-            //If we have a lower bound better than beta, use that
-            if (ttBound == 2 && ttScore >= beta) return ttScore;
-            //If we have an upper bound worse than alpha, use that
-            if (ttBound == 3 && ttScore <= alpha) return ttScore;
-        }
+        if (ttKey == board.ZobristKey && ttDepth >= depth && ply > 0 && (ttBound == 1 || (ttBound == 2 && ttScore >= beta) || (ttBound == 3 && ttScore <= alpha)))
+            return ttScore;
 
         Move[] legalMoves = board.GetLegalMoves(qsearch).OrderByDescending(move =>
-            ttMove == move ? 500000000 :
-            move.IsCapture ? 1000000 * (int)move.CapturePieceType - (int)move.MovePieceType :
-            move.IsPromotion ? 1000000 :
-            killerMoves[Math.Min(ply, MAX_PLY - 1), 0] == move || killerMoves[Math.Min(ply, MAX_PLY - 1), 1] == move ? 900000 :
-            0
+            ttMove == move ? 500000000000 :
+            move.IsCapture ? 10000000 * (int)move.CapturePieceType - (int)move.MovePieceType :
+            move.IsPromotion ? 10000000 :
+            killerMoves[Math.Min(ply, 51 - 1), 0] == move || killerMoves[Math.Min(ply, 51 - 1), 1] == move ? 9000000 :
+            history[ply & 1, (int)move.MovePieceType, move.TargetSquare.Index]
         ).ToArray();
-
-        if (board.GetLegalMoves().Length == 0)
-        {
-            if (board.IsInCheck()) return ply - 10000000; else return 0;
-        }
 
         foreach (Move move in legalMoves)
         {
             board.MakeMove(move);
-            int score = -Search(board, timer, depth - 1, -beta, -alpha, ply + 1);
+            int extension = board.IsInCheck() || move.IsPromotion ? 1 : 0;
+            int score = -Search(board, timer, depth - 1 + extension, -beta, -alpha, ply + 1);
             board.UndoMove(move);
 
             if (timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30) return 10000000;
@@ -159,23 +113,19 @@ public class MyBotTTIDMoveOrderPeSTOMaterialKiller : IChessBot
                 {
                     bestMove = move;
                 }
-                if (ply < MAX_PLY)
-                {
-                    if (!move.IsCapture && !move.IsPromotion)
-                    {
-                        //board.MakeMove(move);
-                        //if (!board.IsInCheck())
-                        //{
-                        killerMoves[ply, 1] = killerMoves[ply, 0];
-                        killerMoves[ply, 0] = move;
-                        //}
-                        //board.UndoMove(move);
-                    }
-                }
             }
             alpha = Math.Max(alpha, maxScore);
             if (alpha >= beta)
             {
+                if (!move.IsCapture && !move.IsPromotion)
+                {
+                    if (move != killerMoves[ply, 0] && ply < 51)
+                    {
+                        killerMoves[ply, 1] = killerMoves[ply, 0];
+                        killerMoves[ply, 0] = move;
+                    }
+                    history[ply & 1, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
+                }
                 break;
             }
         }

@@ -1,9 +1,7 @@
-﻿//#define DEBUG_TIMER
-using ChessChallenge.API;
+﻿using ChessChallenge.API;
 using System;
-using System.Linq;
 
-public class EvilBotT2 : IChessBot
+public class EvilBot : IChessBot
 {
     Move bestmoveRoot = Move.NullMove;
 
@@ -156,7 +154,8 @@ public class EvilBotT2 : IChessBot
     {
         bestmoveRoot = Move.NullMove;
         // https://www.chessprogramming.org/Iterative_Deepening
-        for (int depth = 1; depth <= 50; depth++)
+        int depth;
+        for (depth = 1; depth <= 50; depth++)
         {
             int score = Search(board, timer, -30000, 30000, depth, 0);
 
